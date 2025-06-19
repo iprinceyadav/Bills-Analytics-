@@ -64,7 +64,7 @@ try:
 except Exception as e:
     st.error(f"Error loading data: {str(e)}")
     st.stop()
-# Sidebar filters (only date range and MSME filter remain here)
+# Sidebar filters 
 st.sidebar.header("Global Filters")
 date_range = st.sidebar.date_input(
     "Select Date Range",
