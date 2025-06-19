@@ -116,9 +116,9 @@ tab1, tab2 = st.tabs(["Department Analysis", "Vendor Analysis"])
 
 with tab1:
     # Create a container with columns to control select box width
-    col_select1, col_select2, col_select3 = st.columns([1, 3, 1])  # Middle column controls width
+    col_select1, col_select2, col_select3 = st.columns([1, 3, 1])
     
-    with col_select2:  # This centers the select box and makes it smaller
+    with col_select2:
         all_departments = ['All Departments'] + sorted(filtered_df['DEPARTMENT'].unique().tolist())
         selected_dept = st.selectbox(
             "Select Department", 
@@ -184,8 +184,7 @@ with tab1:
                     hovertemplate="<b>%{label}</b><br>" +
                                 "Percentage: %{percent}<br>" +
                                 "Amount: %{customdata[0]}<br>" +
-                                "<extra></extra>",
-                    textinfo='percent+label'
+                                "<extra></extra>"
                 )
                 
                 st.plotly_chart(fig2, use_container_width=True)
@@ -198,7 +197,7 @@ with tab1:
         
         st.subheader(f"Analysis for {selected_dept} Department")
         
-        # Department KPIs (removed Pending Payments)
+        # Department KPIs
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total Vendors", dept_df['VENDORNAME'].nunique())
@@ -207,15 +206,37 @@ with tab1:
         with col3:
             st.metric("Avg Payment Days", f"{dept_df['TOTAL_DAYS_for_PAYMENT'].mean():.1f} days")
         
-        # All vendors in this department (not just top 5)
-        st.subheader(f"All Vendors in {selected_dept}")
+        # Vendor Payment Distribution Pie Chart
+        st.subheader(f"Payment Distribution by Vendor in {selected_dept}")
+        vendor_payments = dept_df.groupby('VENDORNAME')['BILLVALUE'].sum().reset_index()
+        vendor_payments['Amount'] = vendor_payments['BILLVALUE'].apply(lambda x: f"₹{x:,.2f}")
         
-        # Calculate payment frequency (how many times payment was done to each vendor)
-        vendor_stats = dept_df.groupby('VENDORNAME').agg({
+        fig3 = px.pie(
+            vendor_payments,
+            values='BILLVALUE',
+            names='VENDORNAME',
+            title=f"Vendor Payment Distribution in {selected_dept}",
+            hole=0.3,
+            hover_data=['Amount']
+        )
+        
+        fig3.update_traces(
+            hovertemplate="<b>%{label}</b><br>" +
+                        "Percentage: %{percent}<br>" +
+                        "Amount: %{customdata[0]}<br>" +
+                        "<extra></extra>",
+            textinfo='percent+label'
+        )
+        
+        st.plotly_chart(fig3, use_container_width=True)
+        
+        # All vendors in this department
+        st.subheader(f"All Vendors in {selected_dept}")
+        all_vendors = dept_df.groupby('VENDORNAME').agg({
             'BILLVALUE': 'sum',
             'TOTAL_DAYS_for_PAYMENT': 'mean',
             'BILLNO': 'count',
-            'PAYMENT_DONE': 'count'  # This counts how many times payment was done
+            'PAYMENT_DONE': 'count'
         }).rename(columns={
             'BILLVALUE': 'Total Amount',
             'TOTAL_DAYS_for_PAYMENT': 'Avg Payment Days',
@@ -224,15 +245,16 @@ with tab1:
         }).sort_values('Total Amount', ascending=False)
         
         st.dataframe(
-            vendor_stats.style.format({
+            all_vendors.style.format({
                 'Total Amount': '₹{:,.2f}',
                 'Avg Payment Days': '{:.1f} days',
                 'Bill Count': '{:,.0f}',
                 'Payment Done Count': '{:,.0f} times'
             }),
             use_container_width=True,
-            height=min(600, 35 * len(vendor_stats)))  # Dynamic height
-
+            height=min(600, 35 * len(all_vendors))
+        )
+        
 with tab2:
     st.subheader("Vendor Performance Analysis")
     
