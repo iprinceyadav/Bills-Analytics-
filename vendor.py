@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import plotly.express as px
+import f
 
 # Set page config
 st.set_page_config(
@@ -15,85 +16,22 @@ st.set_page_config(
 # Fixed data loading function
 @st.cache_data
 def load_data():
-    np.random.seed(42)
-    num_rows = 50
-    
-    # Define possible values
-    departments = ['Finance', 'HR', 'IT', 'Operations', 'Marketing', 'Logistics']
-    vendors = [f'Vendor {chr(i)}' for i in range(65, 91)]  # A-Z
-    bill_types = ['Goods', 'Services', 'Consulting', 'Maintenance']
-    statuses = ['Paid', 'Pending', 'Processed']
-    
-    # Generate base data
-    data = {
-        'TRACKINGNO': [f'TR{str(i).zfill(3)}' for i in range(1, num_rows+1)],
-        'DOCUMENT_ID': [f'DOC{str(i).zfill(3)}' for i in range(1, num_rows+1)],
-        'BILLNO': [f'BL{str(i).zfill(3)}' for i in range(1, num_rows+1)],
-        'VENDORNAME': np.random.choice(vendors, num_rows),
-        'DEPARTMENT': np.random.choice(departments, num_rows),
-        'BILLVALUE': np.random.randint(5000, 50000, num_rows),
-        'TOTAL_DAYS_for_PAYMENT': np.random.randint(5, 30, num_rows),
-        'MSME_VENDOR': np.random.choice(['Yes', 'No'], num_rows, p=[0.6, 0.4]),
-        'BILLTYPE': np.random.choice(bill_types, num_rows),
-        'STATUS': np.random.choice(statuses, num_rows)
-    }
-    
-    # Generate bill dates (as datetime objects)
-    base_date = datetime(2023, 1, 1)
-    data['BILLDATE'] = [base_date + timedelta(days=np.random.randint(0, 365)) for _ in range(num_rows)]
-    
-    # Calculate payment dates by adding payment days to bill dates
-    data['PAYMENT_DONE'] = [
-        data['BILLDATE'][i] + timedelta(days=int(data['TOTAL_DAYS_for_PAYMENT'][i]))
-        for i in range(num_rows)
-    ]
-    
-    # Create DataFrame
-    df = pd.DataFrame(data)
-    
-    # Ensure datetime columns have proper type
-    df['BILLDATE'] = pd.to_datetime(df['BILLDATE'])
-    df['PAYMENT_DONE'] = pd.to_datetime(df['PAYMENT_DONE'])
-    
-    return df
+    excel_path = "E:\internship work\Bill Analytics\DUMP_FE_OVERVIEW.pkl"  # Replace with your file path
+    df = pd.read_pickle(excel_path)
 
-# Load the data
+    # 2. Randomly sample 20% of the data
+    sampled_df = df.sample(frac=0.2, random_state=42)  #
+    return sampled_df
+
+
 try:
     df = load_data()
     st.success("Data loaded successfully!")
 except Exception as e:
     st.error(f"Error loading data: {str(e)}")
     st.stop()
+filtered_df=df.copy()
 # Sidebar filters 
-st.sidebar.header("Global Filters")
-date_range = st.sidebar.date_input(
-    "Select Date Range",
-    value=[df['PAYMENT_DONE'].min(), df['PAYMENT_DONE'].max()],
-    min_value=df['PAYMENT_DONE'].min(),
-    max_value=df['PAYMENT_DONE'].max()
-)
-
-msme_filter = st.sidebar.radio("MSME Vendors", ['All', 'Yes', 'No'])
-bill_type_filter = st.sidebar.multiselect(
-    "Bill Type",
-    options=df['BILLTYPE'].unique(),
-    default=df['BILLTYPE'].unique()
-)
-
-# Apply global filters
-filtered_df = df.copy()
-if len(date_range) == 2:
-    start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
-    filtered_df = filtered_df[
-        (filtered_df['PAYMENT_DONE'] >= start_date) & 
-        (filtered_df['PAYMENT_DONE'] <= end_date)
-    ]
-
-if msme_filter != 'All':
-    filtered_df = filtered_df[filtered_df['MSME_VENDOR'] == msme_filter]
-
-if bill_type_filter:
-    filtered_df = filtered_df[filtered_df['BILLTYPE'].isin(bill_type_filter)]
 
 # Main dashboard
 st.title("Department-wise Vendor Payment Analytics")
@@ -258,45 +196,53 @@ with tab1:
 with tab2:
     st.subheader("Vendor Performance Analysis")
     
-    # Vendor selector
-    selected_vendor = st.selectbox(
-        "Select Vendor",
-        options=sorted(filtered_df['VENDORNAME'].unique())
-    )
+    # Vendor selector with controlled width
+    vendor_col1, vendor_col2, vendor_col3 = st.columns([1, 3, 1])
+    with vendor_col2:
+        selected_vendor = st.selectbox(
+            "Select Vendor",
+            options=sorted(filtered_df['VENDORNAME'].unique()),
+            key='vendor_select'
+        )
     
     vendor_data = filtered_df[filtered_df['VENDORNAME'] == selected_vendor]
     
     if not vendor_data.empty:
-        # Vendor KPIs
-        col1, col2, col3, col4 = st.columns(4)
+        
+        
+        # 5 KPI cards in one row
+        col1, col2, col3, col4  = st.columns(4)
+        
         with col1:
-            st.metric("Total Payments", f"₹{vendor_data['BILLVALUE'].sum():,.2f}")
+            f.tab2_Col1(vendor_data)
+            
         with col2:
-            st.metric("Number of Bills", len(vendor_data))
+            f.tab2_Col2(vendor_data,filtered_df)
+        
         with col3:
-            st.metric("Avg Payment Days", f"{vendor_data['TOTAL_DAYS_for_PAYMENT'].mean():.1f} days")
+            
+            f.tab2_Col3(vendor_data)
         with col4:
-            st.metric("Primary Department", vendor_data['DEPARTMENT'].mode()[0])
+            f.tab2_Col4(vendor_data)
         
         # Vendor payment history
-        st.subheader("Payment History")
-        vendor_history = vendor_data[[
-            'BILLNO', 'BILLDATE', 'PAYMENT_DONE', 'BILLVALUE', 
-            'TOTAL_DAYS_for_PAYMENT', 'DEPARTMENT', 'BILLTYPE', 'STATUS'
-        ]].sort_values('PAYMENT_DONE', ascending=False)
+        with st.expander("Payment History", expanded=False):
         
-        st.dataframe(
-            vendor_history.style.format({
-                'BILLVALUE': '₹{:,.2f}',
-                'TOTAL_DAYS_for_PAYMENT': '{:.1f} days',
-                'BILLDATE': lambda x: x.strftime('%Y-%m-%d'),
-                'PAYMENT_DONE': lambda x: x.strftime('%Y-%m-%d')
-            }),
-            use_container_width=True,
-            height=300
-        )
-        
-        # Payment trend over time
+            vendor_history = vendor_data[[
+                'BILLNO', 'BILLDATE', 'PAYMENT_DONE', 'BILLVALUE', 
+                'TOTAL_DAYS_for_PAYMENT', 'DEPARTMENT', 'BILLTYPE', 'STATUS'
+            ]].sort_values('PAYMENT_DONE', ascending=False)
+            
+            st.dataframe(
+                vendor_history.style.format({
+                    'BILLVALUE': '₹{:,.2f}',
+                    'TOTAL_DAYS_for_PAYMENT': '{:.1f} days',
+                    'BILLDATE': lambda x: x.strftime('%Y-%m-%d'),
+                    'PAYMENT_DONE': lambda x: x.strftime('%Y-%m-%d')
+                }),
+                use_container_width=True,
+                height=300
+            )
         
     else:
         st.warning("No data available for selected vendor")
